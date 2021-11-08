@@ -2,17 +2,18 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include "ThreadPool.h"
+
 
 //#include <windows.h>
 #include <winsock2.h>
 //#include <ws2tcpip.h>
-
+#include <algorithm>
 #include <string>
 #include <cstring>
 #include <thread>
 #include <vector>
-
+#include <set>
+#include <fstream>
 // Need to link with Ws2_32.lib, Mswsock.lib, and Advapi32.lib
 #pragma comment (lib, "Ws2_32.lib")
 #pragma comment (lib, "Mswsock.lib")
@@ -21,7 +22,7 @@
 #include <WS2tcpip.h>
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #define PACKET_SIZE 1024
-
+#define msgSize 30000
 using namespace std;
 
 struct message {
@@ -38,7 +39,10 @@ struct message {
 	*/
 	char nickname[32];
 	int Roomnum;
-	char strBuffer[1000];
+	int fileSize;
+	char strBuffer[msgSize];//이게 사이즈가 한정되면 이제... 파일주고받기는 불가능하다.
+	//가변적으로 늘릴 방법은 없을까.
+	//이걸 수가 정해진 배열이 아니라 포인터로 고치고 관련된곳 메소드들을 다 고칠생각을하니 토가나온다.
 	
 
 	message() {
@@ -46,6 +50,7 @@ struct message {
 		memset(nickname, 0, 32);
 		memset(strBuffer, 0, 1000);
 		Roomnum = -1;
+		fileSize = 0;
 	}
 
 
@@ -89,7 +94,8 @@ public:
 
 private:	
 	
-
+	
+	
 	void connectClient(SOCKET sock);	
 	int recvn(SOCKET s, char* buf, int len, int flags);//사용자 정의 데이터 수신함수
 	void waitFunction(SOCKET sock);

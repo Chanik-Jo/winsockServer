@@ -83,7 +83,7 @@ winServerSocket::winServerSocket() {
             //이걸 스레드로 분리해야하는데 
             //클래스 배열로 디스크립터 넘버와 함수포인터 넘겨줘야 하나?
 
-            cout << "connect success" << endl;
+            cout << "connect success" <<newClientFd << endl;
             connectClient(newClientFd);
         }
 
@@ -110,8 +110,7 @@ void winServerSocket::connectClient(SOCKET sock) {
             a.Roomnum = 0;
             emptyUsr = true;//빈자리가 존재했다.
             break;//빈자리 있으니 더이상 찾지마라.
-        }    
-    
+        }        
     }
 
     if (emptyUsr == false) {//빈자리를 못찾거나 혹은 유저가 없다.
@@ -126,43 +125,73 @@ void winServerSocket::connectClient(SOCKET sock) {
         clientList.push_back(newClient);
         //새로운 유저추가후 멀티스레드 가동.
     }
-
+      
     //실질 작업파트 read/write.
     //이부분은 무한루프여야 할듯하다.
 
-    waitFunction(sock);
+    //waitFunction(sock);
 
+    /*using waitFunction = void(*)();
+    clientTerminal.push_back(new socketThread(waitFunction));*/
+    thread (&winServerSocket::waitFunction, this, sock).detach();
+    return;
+    
     
 }
 void winServerSocket::waitFunction(SOCKET sock) {
     message msg;
     string str;
     int searchRoomNum;
+    vector<int> roomExistance;
     while (1) {
         msg = structReceive(sock);
 
         switch (msg.functionType) {
-        case 1:// all room list send to client
+        case 1: {// all room list send to client
             searchRoomNum = 1;
-            for (clientInfo a : clientList) {
-                if (a.Roomnum == searchRoomNum) {
-                    str.append(to_string(a.Roomnum));
+            str = "";
+
+            for (clientInfo & a : clientList) {
+
+                roomExistance.push_back(a.Roomnum);//일단 모든유저의 방 현황을 따오자.
+                /* str.append(to_string(a.Roomnum));
                     str.append(" room exists. \n");
-                    searchRoomNum++;
-                }
+                    searchRoomNum++;*/
+
 
             }
+            //그리고 중복제거후
+            sort(roomExistance.begin(), roomExistance.end());
+
+            set<int> s(roomExistance.cbegin(), roomExistance.cend());
+
+            roomExistance = vector<int>(s.cbegin(), s.cend());
+            //적당한 미사여구를 줄마다 붙인뒤
+            for (int a : roomExistance) {
+                //str.append(to_string(a));
+                str.append(to_string(a));
+                str.append(" room exists. \n");
+                searchRoomNum++;
+            }
+            cout << str.c_str() << endl;
+            strcpy_s(msg.strBuffer, str.c_str());
+
+
+
             structSend(sock, msg);
-            
+
             break;
 
-
+        }
         case 2: //empty client from clientlist using socketnum
 
-            for (clientInfo a : clientList) {
+            for (clientInfo & a : clientList) {
                 if (a.clientfd == sock) {//등록한 디스크립터 == 연결된 소켓디스크립터
                     a.active = false;
+                    //a.nickname = msg.nickname;
+                    strcpy_s(a.nickname, msg.nickname);
                     //str = a.nickname;
+                    cout <<"left nickname recongine print" << a.nickname << endl;
                     str.append(a.nickname);
                     
                 }
@@ -173,22 +202,24 @@ void winServerSocket::waitFunction(SOCKET sock) {
             cout << str<<endl;
             strcpy_s(msg.strBuffer, str.c_str());
 
-            for (clientInfo a : clientList) {
+            for (clientInfo & a : clientList) {
                 if (msg.Roomnum == a.Roomnum) {//메세지발송자소속룸 = 전체유저중 같은방사람
 
                     structSend(a.clientfd, msg);
                     //수신자 : 나 도 룸넘저가 포함되어 있을테니 상관없게지.
                 }
             }
+            return;
             break;
+            //커밋 테스트
 
-        case 3:// set room num using corresponding socket fd.
-            for (clientInfo a : clientList) {
+        case 3: {// set room num using corresponding socket fd.
+            for (clientInfo & a : clientList) {
                 if (a.clientfd == sock) {
 
-                    
+
                     str.append(" left ");
-                    previousRoomNum = a.Roomnum;
+                    previousRoomNum = a.Roomnum;//
                     //별도에 변수에.
                     str.append(to_string(previousRoomNum));//왜 여기만 안남고 0이되지?
                     str.append(" room ");
@@ -199,10 +230,15 @@ void winServerSocket::waitFunction(SOCKET sock) {
                     */
                     strcpy_s(msg.strBuffer, str.c_str());
                     structSend(sock, msg);
-
-                    a.Roomnum = msg.Roomnum;// 방번호 갱신 
-
                     
+                   a.Roomnum = msg.Roomnum;// 방번호 갱신 근데 왜 이게 루프 돌고나면 깨져? 방번호 0(기본값)일때는 잘오는데
+                   //루프돌고나면 다시 0으로 돌아간다.. ㅠㅠㅠ
+                   strcpy_s(a.nickname, msg.nickname);
+                  
+                                           
+
+                    // 보낼때 roomno 일치하는거 루프돌리는거 빼먹음.
+
                     str.append(" -> ");
                     str.append(to_string(a.Roomnum));
                     str.append(" room\n");
@@ -213,9 +249,14 @@ void winServerSocket::waitFunction(SOCKET sock) {
 
                 }
             }
-            for (clientInfo a : clientList) {
+            for (clientInfo & a : clientList) {
                 if (a.Roomnum == msg.Roomnum)
                     structSend(a.clientfd, msg);//수신자 같은방식구
+                else {
+                message* blankMsg = new message();
+                structSend(a.clientfd, *blankMsg);
+                delete blankMsg;
+                }
                 //각 일치하는 클라이언트에게 메세지 전송.
             }
 
@@ -224,17 +265,40 @@ void winServerSocket::waitFunction(SOCKET sock) {
             strcpy_s(msg.strBuffer, "");
             previousRoomNum = msg.Roomnum;
             break;
+        }
+        case 4:{           //가설. : file를 1바이트(char 한글자 사이즈)로 불러들여 배열로 
+           //바이너리 파일을 강제전환해서 송수신해보자.  이게 가능하다면 말이지...!!!
+           //올바르게 안되니 꼼수식으로 만들어둔 구조체(...가 솔직히 아까우니까!)를 재활용해보자.
+            
+            ofstream out;
+            out.open("main.gif", std::ios::binary);
 
-        case 4:
+            if (out.fail()) {
+                cout << "error ofstream" << endl;
+            }
+
+            out.write(msg.strBuffer, msg.fileSize);
+
+            out.close();
+
            
+            for (clientInfo& a : clientList) {
+                if (a.clientfd == sock) {
+                    structSend(sock, msg);
+                }
+            }
+            strcpy_s(msg.strBuffer, "server has been received file");
+            structSend(sock, msg);
+            
+            break;       
+         }
+              
 
-           break;
-        
         
         case 5:
             cout << "msg struct print" << endl;
             msgStructPrint_(msg);
-            for (clientInfo a : clientList) {
+            for (clientInfo& a : clientList) {
                 if (a.Roomnum == msg.Roomnum)
                     clientStructPrint_(a);
                     structSend(a.clientfd, msg);//수신자 같은방 식구.
@@ -278,6 +342,7 @@ void winServerSocket::structSend(SOCKET sock, message msg) {
     if (retval == SOCKET_ERROR) {
         cout << "send()" << endl;
         exit(1);
+
     }
 
 
@@ -295,10 +360,13 @@ struct message winServerSocket::structReceive(SOCKET sock) {
     retval = recvn(sock, (char*)&len, sizeof(int), 0); // 데이터 받기(고정 길이)
     if (retval == SOCKET_ERROR) {
         cout << " len recvn(SOCKET_ERROR)" << endl;
+
     }
 
     int GetSize;
-    char suBuffer[1500];//버퍼크기는 구조체가 다 들어갈수 있을정도로 여유롭게.
+    //char suBuffer[1500];//버퍼크기는 구조체가 다 들어갈수 있을정도로 여유롭게.
+    char *suBuffer=new char[len];//내용수정 일단 recvn에서 사이즈가 들어오므로.
+    //아니 그것보다 1500들어갈 자이데 retval이 들어가야 하는거 아냐?
     message* msg;
     GetSize = recv(sock, suBuffer, len, 0);
     if (GetSize == SOCKET_ERROR) {

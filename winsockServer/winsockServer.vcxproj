@@ -143,7 +143,7 @@
     <ClCompile Include="winsockServer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ThreadPool.h" />
+    <ClInclude Include="sockThread.h" />
     <ClInclude Include="winServerSocket.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
